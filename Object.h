@@ -4,17 +4,26 @@
 //
 //  Created by 罗婷丹 on 2023/3/14.
 //
-
+#pragma once
 #ifndef Object_h
 #define Object_h
 #include "Value.h"
+#include "jsonc.h"
+#include "json_str.h"
 #include <string>
 #include <map>
 class Object {
  public:
   Object();
   ~Object();
-    
+   
+  Object(const Object& other);
+  Object(const std::string& key, const Value& value);
+
+  template<size_t N>
+  Object(const char(&key)[N], const Value& value);
+
+
   typedef std::map<std::string, Value*> container;
 
   template <typename T>
@@ -35,32 +44,27 @@ class Object {
 
   const std::map<std::string, Value*>& kv_map() const;
 
-  std::string json() const;
-    
-  std::string xml( unsigned format = JSONx, const std::string &header = std::string(), const std::string &attrib = std::string() ) const;
-    
-  std::string write( unsigned format ) const;
+  //std::string json() const;
+  //  
+  //std::string xml( unsigned format = JSONx, const std::string &header = std::string(), const std::string &attrib = std::string() ) const;
+  //  
+  //std::string write( unsigned format ) const;
 
   void reset();
   bool parse(std::istream &input);
   bool parse(const std::string &input);
     
   
-  void insert( const Object &other );
-  void insert( const std::string &key, const Value &value );
+  void add( const Object &other );
+  void add( const std::string &key, const Value &value );
 
-  Object &operator=(const Object &value);
-
-  Object(const Object &other);
-  Object(const std::string &key, const Value &value);
-    
-  template<size_t N>
-  Object(const char (&key)[N], const Value &value) {
-    insert(key,value);
-  }
+   
+ 
     
   template<typename T>
   Object &operator<<(const T &value);
+
+  Object& operator=(const Object& value);
 
  protected:
   static bool parse(std::istream& input, Object& object);

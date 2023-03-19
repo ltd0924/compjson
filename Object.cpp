@@ -6,32 +6,54 @@
 //
 
 #include "Object.h"
-#include "jsonc.h"
+
 Object::Object() : value_map_() {}
 
 Object::Object(const Object &other) {
-  insert(other);
+  add(other);
 }
 Object::Object(const std::string &key, const Value &value) {
-  insert(key,value);
+  add(key,value);
 }
-
-//copy
-Object &Object::operator=(const Object &other) {
-  if (this != &other) {
-    reset();
-    insert(other);
-  }
-  return *this;
-}
-
 
 Object::~Object() {
     reset();
 }
 
 
-void Object::insert(const Object &other ) {
+template<size_t N>
+Object::Object(const char(&key)[N], const Value& value) {
+    add(key, value);
+}
+template <typename T>
+bool Object::count(const std::string& key) const {
+    container::const_iterator it(value_map_.find(key));
+    return it != value_map_.end() && it->second->is<T>();
+}
+
+template <typename T>
+T& Object::get(const std::string& key) {
+    JSONXX_ASSERT(has<T>(key));
+    return value_map_.find(key)->second->get<T>();
+}
+
+template <typename T>
+const T& Object::get(const std::string& key) const {
+    JSONXX_ASSERT(has<T>(key));
+    return value_map_.find(key)->second->get<T>();
+}
+
+template <typename T>
+const T& Object::get(const std::string& key, const typename identity<T>::type& default_value) const {
+    if (has<T>(key)) {
+        return value_map_.find(key)->second->get<T>();
+    }
+    else {
+        return default_value;
+    }
+}
+
+void Object::add(const Object &other ) {
   if (this != &other) {// not same address
     container::const_iterator
         it = other.value_map_.begin(),
@@ -45,10 +67,10 @@ void Object::insert(const Object &other ) {
     }
   } else {
     // recursion is supported here
-    insert( Object(*this) );
+    add( Object(*this) );
   }
 }
-void Object::insert( const std::string &key, const Value &value ) {
+void Object::add( const std::string &key, const Value &value ) {
   container::iterator found = value_map_.find(key);
   if( found != value_map_.end() ) {
     delete found->second;
@@ -56,52 +78,67 @@ void Object::insert( const std::string &key, const Value &value ) {
   value_map_[ key ] = new Value( value );
 }
 
+size_t Object::size() const {
+    return value_map_.size();
+}
+
+bool Object::empty() const {
+    return value_map_.size() == 0;
+}
+
+const std::map<std::string, Value*>& Object::kv_map() const {
+    return value_map_;
+}
+
 Object &Object::operator<<(const Value &value) {
-  if (odd.empty()) {
+  if (str_value.empty()) {
     str_value = value.get<String>();
   } else {
-    import( Object(odd, value) );
+    add( Object(str_value, value) );
     str_value.clear();
   }
   return *this;
 }
+
 Object &Object::operator<<(const Object &value) {
-  import( std::string(str_value),value);
+  add( std::string(str_value),value);
   str_value.clear();
   return *this;
 }
 
-size_t Object::size() const {
-  return value_map_.size();
+//copy
+Object& Object::operator=(const Object& other) {
+    if (this != &other) {
+        reset();
+        add(other);
+    }
+    return *this;
 }
 
-bool Object::empty() const {
-  return value_map_.size() == 0;
-}
 
-std::string Object::write( unsigned format ) const {
-  return format == JSON ? json() : xml(format);
-}
-void Object::reset() {
-  container::iterator it;
-  for (it = value_map_.begin(); it != value_map_.end(); ++it) {
-    delete it->second;
-  }
-  value_map_.clear();
+//std::string Object::write( unsigned format ) const {
+//  return format == JSON ? json() : xml(format);
+//}
+//void Object::reset() {
+//  container::iterator it;
+//  for (it = value_map_.begin(); it != value_map_.end(); ++it) {
+//    delete it->second;
+//  }
+//  value_map_.clear();
+//}
+    
+bool Object::parse(std::istream &input) {
+  return parse(input,*this);
 }
     
-//bool Object::parse(std::istream &input) {
-//  return parse(input,*this);
-//}
-//    
-//bool Object::parse(const std::string &input) {
-//  std::istringstream is( input );
-//  return parse(is,*this);
-//}
-//
+bool Object::parse(const std::string &input) {
+  std::istringstream is( input );
+  return parse(is,*this);
+}
+
 
 bool Object::parse(std::istream& input) {
-    obj.reset();
+    reset();
 
     if (!match("{", input)) {
         return false;
@@ -134,21 +171,23 @@ bool Object::parse(std::istream& input) {
             return false;
         }
         Value* v = new Value();
-        if (!parse_value(input, *v)) {
+        if (!v->parse(input)) {
             delete v;
             break;
         }
-  //repeat key
+        // TODO(hjiang): Add an option to allow duplicated keys?
         if (value_map_.find(key) == value_map_.end()) {
-          value_map_[key] = v;
-        } else {
-          if (parser_is_permissive()) {
-            delete value_map_[key];//cover
             value_map_[key] = v;
-          } else {
-            delete v;
-            return false;
-          }
+        }
+        else {
+            if (parser_is_permissive()) {
+                delete value_map_[key];
+                value_map_[key] = v;
+            }
+            else {
+                delete v;
+                return false;
+            }
         }
     } while (match(",", input));
 
